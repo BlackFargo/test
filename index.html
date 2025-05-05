@@ -81,6 +81,50 @@
 		<div id="result"></div>
 
 		<script>
+			// Функция для генерации подписи
+			async function generateSignature(data, privateKey) {
+				try {
+					// Преобразуем данные в строку без пробелов
+					const strData = JSON.stringify(data).replace(/\s+/g, '')
+
+					// Импортируем приватный ключ
+					const importedKey = await window.crypto.subtle.importKey(
+						'pkcs8',
+						str2ab(atob(privateKey)),
+						{
+							name: 'RSASSA-PKCS1-v1_5',
+							hash: { name: 'SHA-256' },
+						},
+						false,
+						['sign']
+					)
+
+					// Создаем подпись
+					const signature = await window.crypto.subtle.sign(
+						'RSASSA-PKCS1-v1_5',
+						importedKey,
+						new TextEncoder().encode(strData)
+					)
+
+					// Возвращаем подпись в base64
+					return btoa(String.fromCharCode(...new Uint8Array(signature)))
+				} catch (e) {
+					console.error('Ошибка генерации подписи:', e)
+					throw e
+				}
+			}
+
+			// Вспомогательная функция для преобразования строки в ArrayBuffer
+			function str2ab(str) {
+				const buf = new ArrayBuffer(str.length)
+				const bufView = new Uint8Array(buf)
+				for (let i = 0; i < str.length; i++) {
+					bufView[i] = str.charCodeAt(i)
+				}
+				return buf
+			}
+
+			// Обработчик кнопки оплаты
 			document
 				.getElementById('payButton')
 				.addEventListener('click', async function () {
@@ -103,8 +147,18 @@
 					}
 
 					// Настройки запроса
-					const apiUrl = 'https://lk.antilopay.com/api/v1/payment/create' // API URL
+					const apiUrl = 'https://lk.antilopay.com/api/v1/payment/create'
 					const secretId = 'NJ2FT6LWACNOJO6O5XY5GXE5JV7B7YBY'
+
+					// !!! ЗАМЕНИТЕ ЭТОТ КЛЮЧ НА СВОЙ ПРИВАТНЫЙ КЛЮЧ !!!
+					const privateKey = `
+                MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC9NJ2FT6LWACNOJ
+                O6O5XY5GXE5JV7B7YBY3KpD8m9zJ7HkZfLm2nRqXvQ7WlY8U7GxPw3XbN1sRtKu
+                ... (вставьте сюда ваш приватный ключ) ...
+                c2Y5ZVpRZ1J1Z0E9PQ==
+            `
+						.trim()
+						.replace(/\s+/g, '')
 
 					// Элемент для вывода результатов
 					const resultDiv = document.getElementById('result')
@@ -112,13 +166,17 @@
 					resultDiv.innerHTML = '<p>Отправка запроса к API...</p>'
 
 					try {
+						// Генерация подписи
+						const signature = await generateSignature(paymentData, privateKey)
+
 						// Отправка запроса
 						const response = await fetch(apiUrl, {
 							method: 'POST',
 							headers: {
 								'Content-Type': 'application/json',
 								'X-Apay-Secret-Id': secretId,
-								'X-Requested-With': 'XMLHttpRequest',
+								'X-Apay-Sign': signature,
+								'X-Apay-Sign-Version': '1',
 							},
 							body: JSON.stringify(paymentData),
 						})
@@ -129,36 +187,37 @@
 						if (data.code === 0) {
 							resultDiv.className = 'success'
 							resultDiv.innerHTML = `
-                <p>✅ Платеж успешно создан!</p>
-                <p><strong>ID платежа:</strong> ${data.payment_id}</p>
-                <p><strong>Сумма:</strong> ${amount} RUB</p>
-                <button onclick="window.open('${data.payment_url}', '_blank')" 
-                        style="background: #337ab7; margin-top: 10px;">
-                    Перейти к оплате
-                </button>
-              `
+                        <p>✅ Платеж успешно создан!</p>
+                        <p><strong>ID платежа:</strong> ${data.payment_id}</p>
+                        <p><strong>Сумма:</strong> ${amount} RUB</p>
+                        <button onclick="window.open('${data.payment_url}', '_blank')" 
+                                style="background: #337ab7; margin-top: 10px;">
+                            Перейти к оплате
+                        </button>
+                    `
 						} else {
 							resultDiv.className = 'error'
 							resultDiv.innerHTML = `
-                <p>❌ Ошибка при создании платежа</p>
-                <p><strong>Код ошибки:</strong> ${data.code}</p>
-                <p><strong>Сообщение:</strong> ${
-									data.error || 'Неизвестная ошибка'
-								}</p>
-              `
+                        <p>❌ Ошибка при создании платежа</p>
+                        <p><strong>Код ошибки:</strong> ${data.code}</p>
+                        <p><strong>Сообщение:</strong> ${
+													data.error || 'Неизвестная ошибка'
+												}</p>
+                    `
 						}
 					} catch (error) {
 						resultDiv.className = 'error'
 						resultDiv.innerHTML = `
-              <p>❌ Произошла ошибка</p>
-              <p><strong>Тип:</strong> ${error.name}</p>
-              <p><strong>Сообщение:</strong> ${error.message}</p>
-              <p>Попробуйте:</p>
-              <ul>
-                  <li>Проверить интернет-соединение</li>
-                  <li>Обновить страницу</li>
-              </ul>
-            `
+                    <p>❌ Произошла ошибка</p>
+                    <p><strong>Тип:</strong> ${error.name}</p>
+                    <p><strong>Сообщение:</strong> ${error.message}</p>
+                    <p>Проверьте:</p>
+                    <ul>
+                        <li>Корректность приватного ключа</li>
+                        <li>Интернет-соединение</li>
+                        <li>Консоль браузера (F12) для деталей</li>
+                    </ul>
+                `
 						console.error('Детали ошибки:', error)
 					}
 				})
