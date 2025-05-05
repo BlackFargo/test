@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ru">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Тест оплаты Antilopay</title>
+		<style>
+			body {
+				font-family: Arial, sans-serif;
+				max-width: 600px;
+				margin: 0 auto;
+				padding: 20px;
+			}
+			.form-group {
+				margin-bottom: 15px;
+			}
+			label {
+				display: block;
+				margin-bottom: 5px;
+				font-weight: bold;
+			}
+			input,
+			button {
+				width: 100%;
+				padding: 10px;
+				box-sizing: border-box;
+				margin-bottom: 10px;
+			}
+			button {
+				background-color: #4caf50;
+				color: white;
+				border: none;
+				cursor: pointer;
+				margin-top: 10px;
+			}
+			button:hover {
+				background-color: #45a049;
+			}
+			#result {
+				margin-top: 20px;
+				padding: 15px;
+				border-radius: 4px;
+			}
+			.success {
+				background-color: #dff0d8;
+				color: #3c763d;
+				border: 1px solid #d6e9c6;
+			}
+			.error {
+				background-color: #f2dede;
+				color: #a94442;
+				border: 1px solid #ebccd1;
+			}
+			.loading {
+				background-color: #d9edf7;
+				color: #31708f;
+				border: 1px solid #bce8f1;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>Тестовая оплата через Antilopay</h1>
+
+		<div class="form-group">
+			<label for="amount">Сумма (руб):</label>
+			<input type="number" id="amount" value="1" min="1" />
+		</div>
+
+		<div class="form-group">
+			<label for="email">Email покупателя:</label>
+			<input type="email" id="email" value="test@example.com" />
+		</div>
+
+		<div class="form-group">
+			<label for="description">Описание платежа:</label>
+			<input type="text" id="description" value="Тестовый платеж" />
+		</div>
+
+		<button id="payButton">Оплатить</button>
+
+		<div id="result"></div>
+
+		<script>
+			document
+				.getElementById('payButton')
+				.addEventListener('click', async function () {
+					// Получаем данные из формы
+					const amount = document.getElementById('amount').value
+					const email = document.getElementById('email').value
+					const description = document.getElementById('description').value
+
+					// Подготовка платежных данных
+					const paymentData = {
+						project_identificator: 'P67B4C3B7184152695',
+						amount: parseFloat(amount),
+						order_id: 'test_' + Date.now(),
+						currency: 'RUB',
+						product_name: 'Тестовый товар',
+						description: description,
+						customer: {
+							email: email,
+						},
+					}
+
+					// Настройки запроса
+					const proxyUrl = 'https://cors-anywhere.herokuapp.com/'
+					const apiUrl = 'https://lk.antilopay.com/api/v1/payment/create'
+					const secretId = 'NJ2FT6LWACNOJO6O5XY5GXE5JV7B7YBY'
+
+					// Элемент для вывода результатов
+					const resultDiv = document.getElementById('result')
+					resultDiv.className = 'loading'
+					resultDiv.innerHTML = '<p>Отправка запроса к API...</p>'
+
+					try {
+						// Отправка запроса
+						const response = await fetch(proxyUrl + apiUrl, {
+							method: 'POST',
+							headers: {
+								'Content-Type': 'application/json',
+								'X-Apay-Secret-Id': secretId,
+								'X-Requested-With': 'XMLHttpRequest',
+							},
+							body: JSON.stringify(paymentData),
+						})
+
+						// Обработка ответа
+						const data = await response.json()
+
+						if (data.code === 0) {
+							resultDiv.className = 'success'
+							resultDiv.innerHTML = `
+                        <p>✅ Платеж успешно создан!</p>
+                        <p><strong>ID платежа:</strong> ${data.payment_id}</p>
+                        <p><strong>Сумма:</strong> ${amount} RUB</p>
+                        <button onclick="window.open('${data.payment_url}', '_blank')" 
+                                style="background: #337ab7; margin-top: 10px;">
+                            Перейти к оплате
+                        </button>
+                    `
+						} else {
+							resultDiv.className = 'error'
+							resultDiv.innerHTML = `
+                        <p>❌ Ошибка при создании платежа</p>
+                        <p><strong>Код ошибки:</strong> ${data.code}</p>
+                        <p><strong>Сообщение:</strong> ${
+													data.error || 'Неизвестная ошибка'
+												}</p>
+                    `
+						}
+					} catch (error) {
+						resultDiv.className = 'error'
+						resultDiv.innerHTML = `
+                    <p>❌ Произошла ошибка</p>
+                    <p><strong>Тип:</strong> ${error.name}</p>
+                    <p><strong>Сообщение:</strong> ${error.message}</p>
+                    <p>Попробуйте:</p>
+                    <ul>
+                        <li>Разрешить CORS через <a href="https://cors-anywhere.herokuapp.com/corsdemo" target="_blank">эту страницу</a></li>
+                        <li>Проверить интернет-соединение</li>
+                        <li>Обновить страницу</li>
+                    </ul>
+                `
+						console.error('Детали ошибки:', error)
+					}
+				})
+		</script>
+	</body>
+</html>
